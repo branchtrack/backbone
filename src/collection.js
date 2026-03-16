@@ -57,6 +57,7 @@ import {
 } from 'lodash-es';
 import { EventsMixin } from './mixins/events.js';
 import { Model } from './model.js';
+import { Sync } from './sync.js';
 
 /**
  * Collection class - Ordered set of models
@@ -542,40 +543,57 @@ class Collection {
     return this.values();
   }
 
-  // Sync/fetch methods - not implemented in modern version
+  // ============================================================================
+  // Server Persistence Methods
+  // ============================================================================
 
   /**
-   * Sync - NOT IMPLEMENTED
-   * @throws {Error} Always throws
+   * Proxy to the collection's Sync class. Override per class to use a
+   * different transport.
    */
-  sync() {
-    throw new Error(
-      'Collection.sync() is not implemented in the modern Backbone library. ' +
-      'Use external data fetching libraries (fetch API, axios, etc.).'
-    );
+  sync(method, model, options) {
+    return new this.constructor.Sync().execute(method, model, options);
   }
 
   /**
-   * Fetch - NOT IMPLEMENTED
-   * @throws {Error} Always throws
+   * Fetch the collection from the server, resetting or merging into the set.
+   *
+   * @param {Object} [options={}]
+   * @param {boolean} [options.reset=false] - Replace collection with response
+   * @param {boolean} [options.parse=true] - Run response through parse()
+   * @returns {Promise}
    */
-  fetch() {
-    throw new Error(
-      'Collection.fetch() is not implemented in the modern Backbone library. ' +
-      'Use external data fetching libraries to retrieve data. ' +
-      'Example: const data = await fetch(url).then(r => r.json()); collection.set(data);'
-    );
+  fetch(options = {}) {
+    options = extend({ parse: true }, options);
+    const success = options.success;
+    options.success = (resp) => {
+      const method = options.reset ? 'reset' : 'set';
+      this[method](resp, options);
+      if (success) success.call(options.context, this, resp, options);
+    };
+    return this.sync('read', this, options);
   }
 
   /**
-   * Create - NOT IMPLEMENTED
-   * @throws {Error} Always throws
+   * Create a new model instance, add it to the collection, and save to server.
+   * If `wait: true`, waits for the server to respond before adding.
+   *
+   * @param {Object|Model} model - Model attributes or instance
+   * @param {Object} [options={}]
+   * @param {boolean} [options.wait=false] - Wait for server before adding
+   * @returns {Model|false}
    */
-  create() {
-    throw new Error(
-      'Collection.create() is not implemented in the modern Backbone library. ' +
-      'Create models manually and add them to the collection.'
-    );
+  create(model, options = {}) {
+    model = this._prepareModel(model, options);
+    if (!model) return false;
+    if (!options.wait) this.add(model, options);
+    const success = options.success;
+    options.success = (m, resp, callbackOpts) => {
+      if (options.wait) this.add(m, callbackOpts);
+      if (success) success.call(callbackOpts.context, m, resp, callbackOpts);
+    };
+    model.save(null, options);
+    return model;
   }
 
   // Internal methods
@@ -709,6 +727,9 @@ class Collection {
 
 // Mix in EventsMixin
 Object.assign(Collection.prototype, EventsMixin);
+
+// Default Sync class — swap via MyCollection.Sync = CustomSync
+Collection.Sync = Sync;
 
 // Iterator constants
 const ITERATOR_VALUES = 1;

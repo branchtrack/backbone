@@ -2,7 +2,6 @@
  * Model - Modern ES6 model class for Backbone
  *
  * Represents a single data object with attributes, validation, and change tracking.
- * This is a modern reimplementation without server sync capabilities.
  *
  * @module Model
  */
@@ -26,6 +25,7 @@ import {
   chain
 } from 'lodash-es';
 import { EventsMixin } from './mixins/events.js';
+import { Sync } from './sync.js';
 
 /**
  * Model class - Represents a data object with attributes and change tracking
@@ -530,86 +530,134 @@ export class Model {
   }
 
   // ============================================================================
-  // Server Persistence Methods (Not Implemented - Throw Errors)
+  // Server Persistence Methods
   // ============================================================================
 
   /**
-   * Backbone.sync method - NOT IMPLEMENTED in modern version.
-   * Use external data management libraries instead.
+   * Proxy to the model's Sync class. Override per class to use a
+   * different transport:
    *
-   * @throws {Error} Always throws - sync is not supported
+   *   class MyModel extends Model {}
+   *   MyModel.Sync = class extends Sync {
+   *     init(method, model, options) {
+   *       const init = super.init(method, model, options);
+   *       init.headers['Authorization'] = 'Bearer token';
+   *       return init;
+   *     }
+   *   };
    */
-  sync() {
-    throw new Error(
-      'Model.sync() is not implemented in the modern Backbone library. ' +
-      'Use external data fetching libraries (fetch API, axios, etc.) and update models manually.'
-    );
+  sync(method, model, options) {
+    return new this.constructor.Sync().execute(method, model, options);
   }
 
   /**
-   * Save method - NOT IMPLEMENTED in modern version.
-   * Update attributes locally and use external data management.
+   * Fetch the model from the server, merging the response with local attributes.
+   * Triggers a "change" event if the attributes change.
    *
-   * @throws {Error} Always throws - save is not supported
-   *
-   * @example
-   * // Instead of model.save(), do:
-   * model.set(attributes);
-   * const response = await fetch('/api/books', {
-   *   method: 'POST',
-   *   body: JSON.stringify(model.toJSON())
-   * });
+   * @param {Object} [options={}]
+   * @param {boolean} [options.parse=true] - Run response through parse()
+   * @returns {Promise}
    */
-  save() {
-    throw new Error(
-      'Model.save() is not implemented in the modern Backbone library. ' +
-      'Use external data fetching libraries (fetch API, axios, etc.) to persist data. ' +
-      'Example: model.set(attrs); await fetch(url, { method: "POST", body: JSON.stringify(model.toJSON()) })'
-    );
+  fetch(options = {}) {
+    options = extend({ parse: true }, options);
+    const success = options.success;
+    options.success = (resp) => {
+      const attrs = options.parse ? this.parse(resp, options) : resp;
+      if (attrs) this.set(attrs, options);
+      if (success) success.call(options.context, this, resp, options);
+    };
+    return this.sync('read', this, options);
   }
 
   /**
-   * Fetch method - NOT IMPLEMENTED in modern version.
-   * Use external data management libraries instead.
+   * Save the model to the server. Uses POST for new models, PUT for existing,
+   * PATCH when `options.patch` is true.
    *
-   * @throws {Error} Always throws - fetch is not supported
-   *
-   * @example
-   * // Instead of model.fetch(), do:
-   * const response = await fetch('/api/books/1');
-   * const data = await response.json();
-   * model.set(data);
+   * @param {string|Object} [key] - Attribute name or hash
+   * @param {*} [val] - Attribute value
+   * @param {Object} [options={}]
+   * @param {boolean} [options.wait=false] - Wait for server before updating
+   * @param {boolean} [options.patch=false] - Use PATCH instead of PUT
+   * @returns {Promise|false} Returns false if validation fails
    */
-  fetch() {
-    throw new Error(
-      'Model.fetch() is not implemented in the modern Backbone library. ' +
-      'Use external data fetching libraries (fetch API, axios, etc.) to retrieve data. ' +
-      'Example: const data = await fetch(url).then(r => r.json()); model.set(data);'
-    );
+  save(key, val, options) {
+    let attrs;
+    if (key == null || typeof key === 'object') {
+      attrs = key;
+      options = val || {};
+    } else {
+      (attrs = {})[key] = val;
+      options = options || {};
+    }
+
+    options = extend({ validate: true, parse: true }, options);
+    const wait = options.wait;
+
+    if (attrs && !wait) {
+      if (!this.set(attrs, options)) return false;
+    } else if (!this._validate(attrs, options)) {
+      return false;
+    }
+
+    const savedAttrs = extend({}, this.attributes);
+    if (attrs && wait) extend(this.attributes, attrs);
+
+    const success = options.success;
+    options.success = (resp) => {
+      // Restore original attributes during parse
+      extend(this.attributes, savedAttrs);
+      let serverAttrs = options.parse ? this.parse(resp, options) : resp;
+      if (wait && attrs) serverAttrs = extend({}, attrs, serverAttrs);
+      if (serverAttrs) this.set(serverAttrs, options);
+      if (success) success.call(options.context, this, resp, options);
+    };
+
+    const method = this.isNew() ? 'create' : options.patch ? 'patch' : 'update';
+    if (method === 'patch' && !options.attrs) options.attrs = attrs;
+
+    const xhr = this.sync(method, this, options);
+    // Restore attributes if wait
+    if (attrs && wait) extend(this.attributes, savedAttrs);
+    return xhr;
   }
 
   /**
-   * Destroy method - NOT IMPLEMENTED in modern version.
-   * Handle deletion externally.
+   * Destroy this model on the server. Removes it from its collection.
+   * If `wait: true`, waits for the server before removing.
    *
-   * @throws {Error} Always throws - destroy is not supported
-   *
-   * @example
-   * // Instead of model.destroy(), do:
-   * await fetch('/api/books/1', { method: 'DELETE' });
-   * model.trigger('destroy', model);
+   * @param {Object} [options={}]
+   * @param {boolean} [options.wait=false] - Wait for server before triggering destroy
+   * @returns {Promise|false}
    */
-  destroy() {
-    throw new Error(
-      'Model.destroy() is not implemented in the modern Backbone library. ' +
-      'Handle deletion with external libraries and trigger events manually if needed. ' +
-      'Example: await fetch(url, { method: "DELETE" }); model.trigger("destroy", model);'
-    );
+  destroy(options = {}) {
+    const wait = options.wait;
+
+    const destroyModel = () => {
+      this.stopListening();
+      this.trigger('destroy', this, this.collection, options);
+    };
+
+    if (this.isNew()) {
+      destroyModel();
+      return Promise.resolve(false);
+    }
+
+    const success = options.success;
+    options.success = (resp) => {
+      if (wait) destroyModel();
+      if (success) success.call(options.context, this, resp, options);
+    };
+
+    if (!wait) destroyModel();
+    return this.sync('delete', this, options);
   }
 }
 
 // Mix in EventsMixin to Model prototype
 Object.assign(Model.prototype, EventsMixin);
+
+// Default Sync class — swap via MyModel.Sync = CustomSync
+Model.Sync = Sync;
 
 // Underscore/Lodash methods that operate on model attributes
 // These provide convenient access to common operations on the attributes object

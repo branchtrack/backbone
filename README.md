@@ -1,6 +1,6 @@
 # Backbone.js - Modern ES6 Version
 
-A modern ES6+ rewrite of Backbone.js with native DOM APIs, lodash-es, and zero jQuery dependencies.
+A modern ES6+ rewrite of Backbone.js with native DOM APIs, native fetch, lodash-es, and zero jQuery/Underscore dependencies.
 
 ## Overview
 
@@ -8,10 +8,11 @@ This is a modernized version of Backbone.js that maintains API compatibility whi
 
 - **ES6 Classes** - All components are ES6 classes with proper inheritance
 - **Native DOM** - No jQuery dependency, uses native DOM APIs
+- **Native fetch** - Built-in REST sync via the fetch API, no jQuery Ajax
 - **Lodash-es** - Tree-shakeable lodash utilities instead of underscore
 - **ES Modules** - Full ESM support with named exports
 - **No Globals** - Clean module system, no global namespace pollution
-- **No AJAX** - Removed sync/fetch implementations (bring your own)
+- **Pluggable Sync** - Extend the `Sync` class to customise transport
 
 ## Installation
 
@@ -20,6 +21,20 @@ npm install
 ```
 
 ## Usage
+
+```javascript
+import {
+  Model,
+  Collection,
+  View,
+  Router,
+  History,
+  history,
+  Sync,
+} from "./src/index.js";
+```
+
+## Quick Start
 
 ```javascript
 import { Model, Collection, View, EventsMixin } from "./src/index.js";
@@ -225,6 +240,101 @@ const app = new AppView({
 - `model` - Associated model
 - `collection` - Associated collection
 
+### Router
+
+Client-side URL routing that maps URLs to actions.
+
+```javascript
+class AppRouter extends Router {
+  routes() {
+    return {
+      "": "home",
+      "todos/:id": "showTodo",
+      "*path": "notFound",
+    };
+  }
+
+  home() {
+    console.log("Showing home");
+  }
+
+  showTodo(id) {
+    console.log("Showing todo", id);
+  }
+
+  notFound(path) {
+    console.log("Not found:", path);
+  }
+}
+
+const router = new AppRouter();
+history.start({ pushState: true });
+```
+
+**Key Methods:**
+
+- `route(route, name, callback)` - Manually define a route
+- `navigate(fragment, options)` - Navigate to a URL fragment
+
+### History
+
+Manages browser history via `pushState` or hashchange.
+
+```javascript
+import { history } from "./src/index.js";
+
+// Start history (call once in your app)
+history.start({ pushState: true });
+
+// Navigate programmatically
+history.navigate("todos/1", { trigger: true });
+```
+
+**Key Methods:**
+
+- `start(options)` - Start listening to URL changes
+- `stop()` - Stop listening
+- `navigate(fragment, options)` - Navigate to a fragment
+
+### Sync
+
+RESTful server synchronization via the native fetch API.
+
+```javascript
+import { Sync } from "./src/index.js";
+
+// Default CRUD operations work automatically
+class Todo extends Model {
+  urlRoot() {
+    return "/api/todos";
+  }
+}
+
+const todo = new Todo({ id: 1 });
+await todo.fetch(); // GET /api/todos/1
+await todo.save({ title: "x" }); // PUT /api/todos/1
+await todo.destroy(); // DELETE /api/todos/1
+
+// Customise transport by extending Sync
+class AuthSync extends Sync {
+  init(method, model, options) {
+    const req = super.init(method, model, options);
+    req.headers["Authorization"] = "Bearer " + getToken();
+    return req;
+  }
+}
+
+class SecureModel extends Model {}
+SecureModel.Sync = AuthSync;
+```
+
+**Key Methods:**
+
+- `url(method, model, options)` - Build the request URL
+- `init(method, model, options)` - Build the fetch init object (headers, body, etc.)
+- `parse(response)` - Parse the fetch Response, returns JSON by default
+- `execute(method, model, options)` - Orchestrate the full request cycle
+
 ## Testing
 
 All components have comprehensive test coverage using Vitest.
@@ -240,10 +350,12 @@ npm run test:watch
 **Test Coverage:**
 
 - EventsMixin: 50 tests
-- Model: 125 tests (75 test cases)
+- Model: 75 tests
 - Collection: 89 tests
 - View: 41 tests
-- **Total: 255 tests passing ✅**
+- Router + History: 46 tests
+- Sync: 59 tests
+- **Total: 360 tests passing ✅**
 
 ## Differences from Original Backbone
 
@@ -254,11 +366,12 @@ npm run test:watch
    - `view.$('selector')` → removed (use `view.el.querySelector()`)
    - Event delegation uses native `addEventListener`
 
-2. **No sync/ajax** - Removed server synchronization
-   - `Model.prototype.fetch()` throws error
-   - `Model.prototype.save()` throws error
-   - `Model.prototype.destroy()` throws error
-   - `Collection.prototype.fetch()` throws error
+2. **Native fetch** - Server sync uses the native fetch API
+   - `Model.prototype.fetch()` - GET model from server
+   - `Model.prototype.save()` - POST/PUT model to server
+   - `Model.prototype.destroy()` - DELETE model from server
+   - `Collection.prototype.fetch()` - GET collection from server
+   - Extend the `Sync` class to customise transport
 
 3. **ES6 Classes** - Use class syntax
 
@@ -291,6 +404,8 @@ npm run test:watch
 - **Validation** - Same validation hooks
 - **Collections** - Same rich enumeration methods
 - **Views** - Same declarative event binding
+- **Router** - Same route patterns and navigate behavior
+- **Sync** - fetch/save/destroy/create work against a REST endpoint
 - **Philosophy** - Still provides just enough structure
 
 ## Browser Support
@@ -315,14 +430,18 @@ src/
   ├── model.js              # Model class
   ├── collection.js         # Collection class
   ├── view.js               # View class
+  ├── router.js             # Router + History classes
+  ├── sync.js               # Sync class + sync() function
   └── mixins/
       └── events.js         # EventsMixin
 
 test/
-  ├── events_mixin.test.js  # EventsMixin tests
-  ├── model.test.js         # Model tests
-  ├── collection.test.js    # Collection tests
-  └── view.test.js          # View tests
+  ├── events_mixin.test.js  # EventsMixin tests (50)
+  ├── model.test.js         # Model tests (75)
+  ├── collection.test.js    # Collection tests (89)
+  ├── view.test.js          # View tests (41)
+  ├── router.test.js        # Router + History tests (46)
+  └── sync.test.js          # Sync tests (59)
 ```
 
 ## Migration Guide

@@ -419,17 +419,17 @@ describe('Collection', () => {
     });
   });
 
-  describe('server sync methods (should throw errors)', () => {
-    it('should throw error on sync', () => {
-      expect(() => collection.sync()).toThrow('not implemented');
+  describe('server sync methods', () => {
+    it('should have a sync method', () => {
+      expect(typeof collection.sync).toBe('function');
     });
 
-    it('should throw error on fetch', () => {
-      expect(() => collection.fetch()).toThrow('not implemented');
+    it('should have a fetch method', () => {
+      expect(typeof collection.fetch).toBe('function');
     });
 
-    it('should throw error on create', () => {
-      expect(() => collection.create()).toThrow('not implemented');
+    it('should have a create method', () => {
+      expect(typeof collection.create).toBe('function');
     });
   });
 

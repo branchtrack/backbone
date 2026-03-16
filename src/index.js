@@ -16,3 +16,4 @@ export { Collection } from './collection.js';
 export { View } from './view.js';
 export { Router } from './router.js';
 export { History, history } from './history.js';
+export { Sync, sync } from './sync.js';

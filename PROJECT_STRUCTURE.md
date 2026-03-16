@@ -9,13 +9,13 @@ This document describes the organization of the modernized Backbone.js project.
 Modern ES6 modules implementing the Backbone API:
 
 - `events_mixin.js` - Event system with on/off/trigger/listenTo
-- `model.js` - Model class with attributes, validation, change tracking
-- `collection.js` - Collection class with add/remove/sort and lodash utilities
+- `model.js` - Model class with attributes, validation, change tracking, fetch/save/destroy
+- `collection.js` - Collection class with add/remove/sort, lodash utilities, fetch/create
 - `view.js` - View class with DOM management and event delegation
 - `router.js` - Router class with URL pattern matching, named params, splats
 - `history.js` - History class with pushState/hash-based navigation
+- `sync.js` - Sync class (pluggable fetch transport) + sync() function
 - `index.js` - Barrel exports for the public API
-- `sync.js` - Not yet implemented (placeholder)
 
 ### Tests (`/test/`)
 
@@ -26,8 +26,9 @@ Comprehensive vitest test suite:
 - `collection.test.js` - 89 tests for Collection
 - `view.test.js` - 41 tests for View
 - `router.test.js` - 46 tests for Router and History
+- `sync.test.js` - 59 tests for Sync, Model server methods, Collection server methods
 
-**Total: 301 tests, all passing ✅**
+**Total: 360 tests, all passing ✅**
 
 ### Configuration
 
@@ -108,23 +109,16 @@ See `package.json` - `"main": "src/index.js"`
 3. **Syntax**: Arrow functions, const/let, template literals
 4. **Dependencies**: lodash-es (tree-shakeable) instead of underscore
 5. **Testing**: vitest instead of QUnit/karma
-6. **Sync**: Not yet implemented (throwsError for now)
+6. **Sync**: Native fetch API with pluggable `Sync` class
 
 ## Migration Status
 
-✅ Complete:
+✅ Complete — all components implemented:
 
 - EventsMixin (50 tests)
-- Model (75 tests)
-- Collection (89 tests)
+- Model (75 tests) — fetch, save, destroy
+- Collection (89 tests) — fetch, create
 - View (41 tests)
 - Router (22 tests)
-- History (15 tests)
-- Route conversion utilities (9 tests)
-
-🚧 Todo:
-
-- Sync implementation
-- Server integration examples
-- Build tooling for distribution
-- Performance benchmarks
+- History (15 + 9 conversion tests)
+- Sync (59 tests) — pluggable via `Model.Sync`

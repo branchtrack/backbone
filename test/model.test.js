@@ -549,21 +549,21 @@ describe('Model', () => {
     });
   });
 
-  describe('server sync methods (should throw errors)', () => {
-    it('should throw error on sync', () => {
-      expect(() => doc.sync()).toThrow('Model.sync() is not implemented');
+  describe('server sync methods', () => {
+    it('should have a sync method', () => {
+      expect(typeof doc.sync).toBe('function');
     });
 
-    it('should throw error on save', () => {
-      expect(() => doc.save()).toThrow('Model.save() is not implemented');
+    it('should have a save method', () => {
+      expect(typeof doc.save).toBe('function');
     });
 
-    it('should throw error on fetch', () => {
-      expect(() => doc.fetch()).toThrow('Model.fetch() is not implemented');
+    it('should have a fetch method', () => {
+      expect(typeof doc.fetch).toBe('function');
     });
 
-    it('should throw error on destroy', () => {
-      expect(() => doc.destroy()).toThrow('Model.destroy() is not implemented');
+    it('should have a destroy method', () => {
+      expect(typeof doc.destroy).toBe('function');
     });
   });
 
